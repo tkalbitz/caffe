@@ -13,6 +13,11 @@ list(APPEND Caffe_LINKER_LIBS PUBLIC ${Boost_LIBRARIES})
 find_package(Threads REQUIRED)
 list(APPEND Caffe_LINKER_LIBS PRIVATE ${CMAKE_THREAD_LIBS_INIT})
 
+# ---[ Aligned Malloc
+if(USE_ALIGNED_MALLOC)
+    list(APPEND Caffe_DEFINITIONS PUBLIC -DUSE_ALIGNED_MALLOC)
+endif()
+
 # ---[ OpenMP
 if(USE_OPENMP)
   # Ideally, this should be provided by the BLAS library IMPORTED target. However,

@@ -26,6 +26,9 @@ inline void CaffeMallocHost(void** ptr, size_t size, bool* use_cuda) {
 #endif
 #ifdef USE_MKL
   *ptr = mkl_malloc(size ? size:1, 64);
+#elif defined(USE_ALIGNED_MALLOC)
+  // Have a 32 byte aligned pointer which pads the end.
+  CHECK_EQ(posix_memalign(ptr, 32, size+31), 0);
 #else
   *ptr = malloc(size);
 #endif
