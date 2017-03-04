@@ -46,6 +46,7 @@ caffe_option(USE_ALIGNED_MALLOC "Use an aligned malloc for the layers." ON)
 include(cmake/Dependencies.cmake)
 
 # ---[ Flags
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=atom -mtune=atom")
 if(UNIX OR APPLE)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -Wall")
 endif()
