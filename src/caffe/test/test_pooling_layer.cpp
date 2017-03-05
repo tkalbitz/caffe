@@ -572,6 +572,37 @@ TYPED_TEST(PoolingLayerTest, TestForwardAve) {
   EXPECT_NEAR(this->blob_top_->cpu_data()[8], 8.0 / 9, epsilon);
 }
 
+TYPED_TEST(PoolingLayerTest, TestForwardAveSSE) {
+  typedef typename TypeParam::Dtype Dtype;
+  LayerParameter layer_param;
+  layer_param.set_phase(TEST);
+  PoolingParameter* pooling_param = layer_param.mutable_pooling_param();
+  pooling_param->set_kernel_size(2);
+  pooling_param->set_stride(2);
+  pooling_param->set_pool(PoolingParameter_PoolMethod_AVE);
+  this->blob_bottom_->Reshape(1, 1, 4, 6);
+  Dtype* bottom = this->blob_bottom_->mutable_cpu_data();
+  for (int y = 0; y < 4; y++) {
+      for (int x = 0; x < 6; x++) {
+          bottom[x+y*6] = x + y;
+      }
+  }
+  PoolingLayer<Dtype> layer(layer_param);
+  layer.SetUp(this->blob_bottom_vec_, this->blob_top_vec_);
+  EXPECT_EQ(this->blob_top_->num(), 1);
+  EXPECT_EQ(this->blob_top_->channels(), 1);
+  EXPECT_EQ(this->blob_top_->height(), 2);
+  EXPECT_EQ(this->blob_top_->width(), 3);
+  layer.Forward(this->blob_bottom_vec_, this->blob_top_vec_);
+  Dtype epsilon = 1e-5;
+  EXPECT_NEAR(this->blob_top_->cpu_data()[0], (0+0 + 1+0 + 0+1 + 1+1) / 4., epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[1], (2+0 + 3+0 + 2+1 + 3+1) / 4., epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[2], (4+0 + 5+0 + 4+1 + 5+1) / 4., epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[3], (0+2 + 1+2 + 0+3 + 1+3) / 4., epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[4], (2+2 + 3+2 + 2+3 + 3+3) / 4., epsilon);
+  EXPECT_NEAR(this->blob_top_->cpu_data()[5], (4+2 + 5+2 + 4+3 + 5+3) / 4., epsilon);
+}
+
 TYPED_TEST(PoolingLayerTest, TestGradientAve) {
   typedef typename TypeParam::Dtype Dtype;
   for (int kernel_h = 3; kernel_h <= 4; kernel_h++) {
