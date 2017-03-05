@@ -108,7 +108,11 @@ void PoolingLayer<Dtype>::Reshape(const vector<Blob<Dtype>*>& bottom,
   if (top.size() > 1) {
     top[1]->ReshapeLike(*top[0]);
   }
-  if (this->layer_param_.phase() == TRAIN) {
+  use_fast_code_ = this->layer_param_.phase() == TEST &&
+      kernel_h_ == 2 && kernel_w_ == 2 &&
+      height_ & 1 == 0 && width_ & 1 == 0 &&
+      pad_h_ == 0 && pad_w_ == 0;
+  if (!use_fast_code_) {
     // If max pooling, we will initialize the vector index part.
     if (this->layer_param_.pooling_param().pool() ==
         PoolingParameter_PoolMethod_MAX && top.size() == 1) {
@@ -133,9 +137,7 @@ void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
   Dtype* top_data = top[0]->mutable_cpu_data();
   const int top_count = top[0]->count();
   // We'll output the mask to top[1] if it's of size >1.
-  if (this->layer_param_.phase() == TRAIN ||
-      this->layer_param_.pooling_param().pool() != PoolingParameter_PoolMethod_MAX  ||
-      kernel_h_ != 2 || kernel_w_ != 2) {
+  if (!use_fast_code_) {
     const bool use_top_mask = top.size() > 1;
     int* mask = NULL;  // suppress warnings about uninitalized variables
     Dtype* top_mask = NULL;
@@ -230,22 +232,50 @@ void PoolingLayer<Dtype>::Forward_cpu(const vector<Blob<Dtype>*>& bottom,
       LOG(FATAL) << "Unknown pooling method.";
     }
   } else {
-    for (int n = 0; n < bottom[0]->num(); ++n) {
-      for (int c = 0; c < channels_; ++c) {
-        for (int ph = 0; ph < pooled_height_; ++ph) {
-          for (int pw = 0; pw < pooled_width_; ++pw) {
-            size_t h = ph * stride_h_ ;
-            size_t w = pw * stride_w_;
-            size_t pool_index = ph * pooled_width_ + pw;
-            size_t index = h * width_ + w;
-            top_data[pool_index] = std::max(std::max(bottom_data[index], bottom_data[index + 1]),
-                std::max(bottom_data[index + width_], bottom_data[index + width_ + 1]));
+    switch (this->layer_param_.pooling_param().pool()) {
+    case PoolingParameter_PoolMethod_MAX:
+      for (int n = 0; n < bottom[0]->num(); ++n) {
+        for (int c = 0; c < channels_; ++c) {
+          for (int ph = 0; ph < pooled_height_; ++ph) {
+            for (int pw = 0; pw < pooled_width_; ++pw) {
+              size_t h = ph * stride_h_;
+              size_t w = pw * stride_w_;
+              size_t pool_index = ph * pooled_width_ + pw;
+              size_t index = h * width_ + w;
+              top_data[pool_index] = std::max(std::max(bottom_data[index], bottom_data[index + 1]),
+                  std::max(bottom_data[index + width_], bottom_data[index + width_ + 1]));
+            }
           }
+          // compute offset
+          bottom_data += bottom[0]->offset(0, 1);
+          top_data += top[0]->offset(0, 1);
         }
-        // compute offset
-        bottom_data += bottom[0]->offset(0, 1);
-        top_data += top[0]->offset(0, 1);
       }
+      break;
+    case PoolingParameter_PoolMethod_AVE:
+      for (int n = 0; n < bottom[0]->num(); ++n) {
+        for (int c = 0; c < channels_; ++c) {
+          for (int ph = 0; ph < pooled_height_; ++ph) {
+            for (int pw = 0; pw < pooled_width_; ++pw) {
+              size_t h = ph * stride_h_;
+              size_t w = pw * stride_w_;
+              size_t pool_index = ph * pooled_width_ + pw;
+              size_t index = h * width_ + w;
+              top_data[pool_index] = (bottom_data[index] + bottom_data[index + 1] +
+                  bottom_data[index + width_] + bottom_data[index + width_ + 1]) / 4.f;
+            }
+          }
+          // compute offset
+          bottom_data += bottom[0]->offset(0, 1);
+          top_data += top[0]->offset(0, 1);
+        }
+      }
+      break;
+    case PoolingParameter_PoolMethod_STOCHASTIC:
+      NOT_IMPLEMENTED;
+      break;
+    default:
+      LOG(FATAL) << "Unknown pooling method.";
     }
   }
 }
